@@ -158,7 +158,7 @@ namespace Lumina
             var hash           = GetFileHash( lowerPath[..directorySplit], lowerPath[(directorySplit + 1)..] );
             var hash2          = Crc32.Get( lowerPath );
 
-            var                pathParts = lowerPath.Split( '/' );
+            var                pathParts = ((ReadOnlySpan<char>)lowerPath).Split( '/' );
             ReadOnlySpan<char> category  = pathParts.MoveNext() ? lowerPath[pathParts.Current] : [];
             ReadOnlySpan<char> repo      = pathParts.MoveNext() ? lowerPath[pathParts.Current] : [];
             // todo: supports up to ex9, so we've got another ~11 years before this breaks
