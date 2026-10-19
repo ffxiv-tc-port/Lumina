@@ -93,7 +93,11 @@ public class ExcelModule
         if( variant != ExcelVariant.Default )
             throw new NotSupportedException( $"Specified sheet variant {variant} is not supported; was expecting {ExcelVariant.Default}." );
 
-        return new ExcelSheet< T >( rawSheet );
+        if( RowTypeTraits< T >.IsCollectible )
+            return new ExcelSheet< T >( rawSheet );
+
+        return rawSheet.GetCachedTypedSheet< ExcelSheet< T > >() ??
+            rawSheet.CacheTypedSheet( new ExcelSheet< T >( rawSheet ) );
     }
 
     /// <summary>Loads an <see cref="SubrowExcelSheet{T}"/>.</summary>
@@ -117,7 +121,12 @@ public class ExcelModule
         if ( variant != ExcelVariant.Subrows )
             throw new NotSupportedException( $"Specified sheet variant {variant} is not supported; was expecting {ExcelVariant.Subrows}." );
 
-        return new SubrowExcelSheet< T >( (RawSubrowExcelSheet)rawSheet );
+        var subrowSheet = (RawSubrowExcelSheet)rawSheet;
+        if( RowTypeTraits< T >.IsCollectible )
+            return new SubrowExcelSheet< T >( subrowSheet );
+
+        return subrowSheet.GetCachedTypedSheet< SubrowExcelSheet< T > >() ??
+            subrowSheet.CacheTypedSheet( new SubrowExcelSheet< T >( subrowSheet ) );
     }
 
     /// <summary>Loads a typed <see cref="IExcelSheet"/>.</summary>
@@ -259,6 +268,13 @@ public class ExcelModule
         SheetAttributeCache.GetOrAdd(
             rowType,
             static type => type.GetCustomAttribute< SheetAttribute >( false ) );
+
+    // Row types from collectible (plugin) assemblies are never cached: a reference held by a sheet would keep their
+    // AssemblyLoadContext from unloading. Being per-instantiation, this flag itself lives and dies with that context.
+    private static class RowTypeTraits< T >
+    {
+        public static readonly bool IsCollectible = typeof( T ).IsCollectible;
+    }
 
     private sealed class SheetData
     {

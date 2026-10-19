@@ -8,6 +8,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Lumina.Excel;
 
@@ -65,6 +66,9 @@ public class RawExcelSheet : IExcelSheet
 
     private readonly int[] _rowIndexLookupArray;
     private readonly uint _rowIndexLookupArrayOffset;
+
+    // Typed wrappers handed out by ExcelModule, at most one per sheet type. Copy-on-write: published arrays are never mutated.
+    private IExcelSheet[] _typedSheets = [];
 
     internal uint ColumnHash { get; }
 
@@ -182,6 +186,41 @@ public class RawExcelSheet : IExcelSheet
 
     /// <summary>Gets the offset lookup table.</summary>
     internal ReadOnlySpan< RowOffsetLookup > OffsetLookupTable => _rowOffsetLookupTable;
+
+    /// <summary>Gets the typed wrapper of type <typeparamref name="TSheet"/> previously cached over this sheet.</summary>
+    /// <returns>The cached wrapper, or <see langword="null"/> if none was cached.</returns>
+    internal TSheet? GetCachedTypedSheet< TSheet >() where TSheet : class, IExcelSheet
+    {
+        foreach( var cached in Volatile.Read( ref _typedSheets ) )
+        {
+            if( cached is TSheet typed )
+                return typed;
+        }
+
+        return null;
+    }
+
+    /// <summary>Caches <paramref name="sheet"/>, a stateless typed wrapper over this sheet.</summary>
+    /// <returns>The instance to hand out: an already cached wrapper of the same type if another thread won the race, otherwise <paramref name="sheet"/>.</returns>
+    /// <remarks>The caller must not pass a wrapper whose row type is collectible; it would pin that type's AssemblyLoadContext.</remarks>
+    internal TSheet CacheTypedSheet< TSheet >( TSheet sheet ) where TSheet : class, IExcelSheet
+    {
+        while( true )
+        {
+            var current = Volatile.Read( ref _typedSheets );
+            foreach( var cached in current )
+            {
+                if( cached is TSheet typed )
+                    return typed;
+            }
+
+            var next = new IExcelSheet[current.Length + 1];
+            current.CopyTo( next, 0 );
+            next[ ^1 ] = sheet;
+            if( Interlocked.CompareExchange( ref _typedSheets, next, current ) == current )
+                return sheet;
+        }
+    }
 
     /// <inheritdoc/>
     public ushort GetColumnOffset( int columnIdx ) => Columns[ columnIdx ].Offset;
