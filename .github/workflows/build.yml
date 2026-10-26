@@ -38,3 +38,4 @@ jobs:
           ./src/Lumina/bin/Release/**/Lumina*.pdb
           ./src/Lumina/bin/Release/**/Lumina*.deps.json
 # workflow re-registration trigger 2026-10-26T14:10:00Z
+# workflow re-registration trigger 2026-10-26T17:07:30Z
